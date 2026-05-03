@@ -1,6 +1,12 @@
 const STORAGE_KEY = "marketpulse-in.snapshot.v1";
 const INSTALL_MESSAGE = "On iPhone, Safari does not show an install prompt. Use Share -> Add to Home Screen.";
 const FEED_LIMIT = 6;
+const API_ENDPOINTS = [
+  "./data/latest.json",
+  "/data/latest.json",
+  "./api/market-data",
+  "/api/market-data"
+];
 
 const SOURCES = {
   rbiFeed: "https://rbi.org.in/pressreleases_rss.xml",
@@ -65,6 +71,19 @@ function saveCache(snapshot) {
 
 async function refreshDashboard({ initialLoad = false } = {}) {
   setLoading(true, initialLoad ? "Syncing initial snapshot" : "Refreshing live data");
+
+  const apiSnapshot = await fetchApiSnapshot();
+  if (apiSnapshot) {
+    const normalized = normalizeSnapshot(apiSnapshot, []);
+    saveCache(normalized);
+    renderSnapshot(normalized, {
+      statusText: "Live snapshot ready",
+      state: "ok",
+      errors: normalized.errors
+    });
+    setLoading(false);
+    return;
+  }
 
   const results = await Promise.allSettled([
     fetchSource("RBI feed", SOURCES.rbiFeed, parseRbiFeed),
@@ -137,6 +156,40 @@ async function fetchSource(label, url, parser) {
   }
 
   throw lastError || new Error(`${label} failed`);
+}
+
+async function fetchApiSnapshot() {
+  for (const endpoint of API_ENDPOINTS) {
+    try {
+      const response = await fetch(endpoint, { cache: "no-store" });
+      if (!response.ok) {
+        continue;
+      }
+
+      const json = await response.json();
+      if (!json || typeof json !== "object") {
+        continue;
+      }
+
+      if (Array.isArray(json.rbi) || Array.isArray(json.ccil) || Array.isArray(json.fimmda)) {
+        return json;
+      }
+    } catch (error) {
+      console.warn(`API snapshot fetch failed for ${endpoint}`, error);
+    }
+  }
+
+  return null;
+}
+
+function normalizeSnapshot(snapshot, extraErrors) {
+  return {
+    fetchedAt: snapshot.fetchedAt || new Date().toISOString(),
+    rbi: Array.isArray(snapshot.rbi) ? snapshot.rbi : [],
+    ccil: Array.isArray(snapshot.ccil) ? snapshot.ccil : [],
+    fimmda: Array.isArray(snapshot.fimmda) ? snapshot.fimmda : [],
+    errors: [...(Array.isArray(snapshot.errors) ? snapshot.errors : []), ...extraErrors]
+  };
 }
 
 function buildAttempts(url) {
@@ -227,7 +280,7 @@ function renderSnapshot(snapshot, { statusText, state, errors }) {
 }
 
 function renderEmpty() {
-  elements.outlook.innerHTML = `<div class="empty-state">No cached data yet. Tap Refresh Data after hosting the app over https.</div>`;
+  elements.outlook.innerHTML = `<div class="empty-state">No cached data yet. Tap Refresh Data after hosting the app over https, or publish a JSON snapshot in <code>data/latest.json</code>.</div>`;
   elements.ccilMetrics.innerHTML = `<div class="empty-state">CCIL metrics will appear here.</div>`;
   elements.fimmdaMetrics.innerHTML = `<div class="empty-state">FIMMDA benchmarks will appear here.</div>`;
   elements.rbiFeed.innerHTML = `<div class="empty-state">RBI headlines will appear here.</div>`;
