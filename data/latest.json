@@ -30,6 +30,26 @@
       "trades": "0"
     }
   ],
+  "tBills": [
+    {
+      "instrument": "91 Day T-Bills",
+      "tenor": "91",
+      "yield": "0.00",
+      "asOn": "May 03, 2026"
+    },
+    {
+      "instrument": "182 Day T-Bills",
+      "tenor": "182",
+      "yield": "0.00",
+      "asOn": "May 03, 2026"
+    },
+    {
+      "instrument": "364 Day T-Bills",
+      "tenor": "364",
+      "yield": "0.00",
+      "asOn": "May 03, 2026"
+    }
+  ],
   "fimmda": [
     {
       "tenor": "Overnight",

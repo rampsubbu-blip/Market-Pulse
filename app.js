@@ -95,6 +95,7 @@ async function refreshDashboard({ initialLoad = false } = {}) {
     fetchedAt: new Date().toISOString(),
     rbi: extractFulfilled(results[0], []),
     ccil: extractFulfilled(results[1], []),
+    tBills: [],
     fimmda: extractFulfilled(results[2], []),
     errors: results
       .filter((result) => result.status === "rejected")
@@ -171,7 +172,7 @@ async function fetchApiSnapshot() {
         continue;
       }
 
-      if (Array.isArray(json.rbi) || Array.isArray(json.ccil) || Array.isArray(json.fimmda)) {
+      if (Array.isArray(json.rbi) || Array.isArray(json.ccil) || Array.isArray(json.fimmda) || Array.isArray(json.tBills)) {
         return json;
       }
     } catch (error) {
@@ -187,6 +188,7 @@ function normalizeSnapshot(snapshot, extraErrors) {
     fetchedAt: snapshot.fetchedAt || new Date().toISOString(),
     rbi: Array.isArray(snapshot.rbi) ? snapshot.rbi : [],
     ccil: Array.isArray(snapshot.ccil) ? snapshot.ccil : [],
+    tBills: Array.isArray(snapshot.tBills) ? snapshot.tBills : [],
     fimmda: Array.isArray(snapshot.fimmda) ? snapshot.fimmda : [],
     errors: [...(Array.isArray(snapshot.errors) ? snapshot.errors : []), ...extraErrors]
   };
@@ -274,7 +276,7 @@ function dedupeByLabel(items, getKey) {
 function renderSnapshot(snapshot, { statusText, state, errors }) {
   renderStatus(statusText, state, snapshot.fetchedAt);
   renderOutlook(snapshot);
-  renderCcil(snapshot.ccil);
+  renderCcil(snapshot.ccil, snapshot.tBills || []);
   renderFimmda(snapshot.fimmda);
   renderRbi(snapshot.rbi);
   renderErrors(errors || []);
@@ -282,7 +284,7 @@ function renderSnapshot(snapshot, { statusText, state, errors }) {
 
 function renderEmpty() {
   elements.outlook.innerHTML = `<div class="empty-state">No cached data yet. Tap Refresh Data after hosting the app over https, or publish a JSON snapshot in <code>data/latest.json</code>.</div>`;
-  elements.ccilMetrics.innerHTML = `<div class="empty-state">CCIL metrics will appear here.</div>`;
+  elements.ccilMetrics.innerHTML = `<div class="empty-state">CCIL and T-bill metrics will appear here.</div>`;
   elements.fimmdaMetrics.innerHTML = `<div class="empty-state">FIMMDA benchmarks will appear here.</div>`;
   elements.rbiFeed.innerHTML = `<div class="empty-state">RBI headlines will appear here.</div>`;
 }
@@ -312,6 +314,7 @@ function buildOutlookCards(snapshot) {
   const cards = [];
   const call = findCcil(snapshot.ccil, "Call");
   const trep = findCcil(snapshot.ccil, "TREP");
+  const tbill91 = findTBill(snapshot.tBills || [], "91 Day T-Bills");
   const overnight = findFimmda(snapshot.fimmda, "Overnight");
   const topHeadline = snapshot.rbi[0];
 
@@ -341,6 +344,13 @@ function buildOutlookCards(snapshot) {
     });
   }
 
+  if (tbill91) {
+    cards.push({
+      title: "T-bill checkpoint",
+      body: `The latest RBI 91-day T-bill cut-off is ${tbill91.yield}%. Compare that against overnight funding to gauge how the short sovereign curve is sitting versus money-market levels.`
+    });
+  }
+
   if (topHeadline) {
     cards.push({
       title: "RBI watch item",
@@ -358,19 +368,36 @@ function buildOutlookCards(snapshot) {
   return cards.slice(0, 3);
 }
 
-function renderCcil(rows) {
-  if (!rows.length) {
+function renderCcil(rows, tBills = []) {
+  const combined = [
+    ...rows.map((row) => ({ kind: "ccil", ...row })),
+    ...tBills.map((row) => ({ kind: "tbill", ...row }))
+  ];
+
+  if (!combined.length) {
     elements.ccilMetrics.innerHTML = `<div class="empty-state">No CCIL rows parsed from the latest fetch.</div>`;
     return;
   }
 
-  elements.ccilMetrics.innerHTML = rows.map((row) => `
-    <div class="metric-card">
-      <span class="metric-card__label">${escapeHtml(row.instrument)}</span>
-      <span class="metric-card__value">${escapeHtml(row.wavg)}%</span>
-      <span class="metric-card__meta">Date ${escapeHtml(row.date)} • Volume ${escapeHtml(row.volume)} • Trades ${escapeHtml(row.trades)}</span>
-    </div>
-  `).join("");
+  elements.ccilMetrics.innerHTML = combined.map((row) => {
+    if (row.kind === "tbill") {
+      return `
+        <div class="metric-card">
+          <span class="metric-card__label">${escapeHtml(row.instrument)}</span>
+          <span class="metric-card__value">${escapeHtml(row.yield)}%</span>
+          <span class="metric-card__meta">RBI cut-off yield | Auction tenor ${escapeHtml(row.tenor)} days | Source date ${escapeHtml(row.asOn || "Latest available")}</span>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="metric-card">
+        <span class="metric-card__label">${escapeHtml(row.instrument)}</span>
+        <span class="metric-card__value">${escapeHtml(row.wavg)}%</span>
+        <span class="metric-card__meta">Date ${escapeHtml(row.date)} | Volume ${escapeHtml(row.volume)} | Trades ${escapeHtml(row.trades)}</span>
+      </div>
+    `;
+  }).join("");
 }
 
 function renderFimmda(rows) {
@@ -383,7 +410,7 @@ function renderFimmda(rows) {
     <div class="metric-card">
       <span class="metric-card__label">${escapeHtml(row.tenor)}</span>
       <span class="metric-card__value">${escapeHtml(row.mibor)}%</span>
-      <span class="metric-card__meta">Time ${escapeHtml(row.time)} • MIBID ${escapeHtml(row.mibid)} • MIBOR Std Dev ${escapeHtml(row.miborStd)}</span>
+      <span class="metric-card__meta">Time ${escapeHtml(row.time)} | MIBID ${escapeHtml(row.mibid)} | MIBOR Std Dev ${escapeHtml(row.miborStd)}</span>
     </div>
   `).join("");
 }
@@ -427,6 +454,10 @@ function findCcil(rows, instrument) {
 
 function findFimmda(rows, tenor) {
   return rows.find((row) => row.tenor.toLowerCase() === tenor.toLowerCase());
+}
+
+function findTBill(rows, instrument) {
+  return rows.find((row) => row.instrument.toLowerCase() === instrument.toLowerCase());
 }
 
 function normalizeWhitespace(text) {

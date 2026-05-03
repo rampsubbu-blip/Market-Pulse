@@ -1,15 +1,17 @@
 export default async function handler(request, response) {
   try {
-    const [rbiText, ccilText, fimmdaText] = await Promise.all([
+    const [rbiFeedText, rbiHomeText, ccilText, fimmdaText] = await Promise.all([
       fetchText("https://rbi.org.in/pressreleases_rss.xml"),
+      fetchText("https://www.rbi.org.in/home.aspx"),
       fetchText("https://www.ccilindia.com/money-market-rates-and-volumes-most-liquid-tenor-"),
       fetchText("https://www.fimmda.org/NSE.aspx")
     ]);
 
     const payload = {
       fetchedAt: new Date().toISOString(),
-      rbi: parseRbiFeed(rbiText),
+      rbi: parseRbiFeed(rbiFeedText),
       ccil: parseCcilPage(ccilText),
+      tBills: parseRbiTBills(rbiHomeText),
       fimmda: parseFimmdaPage(fimmdaText),
       errors: []
     };
@@ -23,6 +25,7 @@ export default async function handler(request, response) {
       fetchedAt: new Date().toISOString(),
       rbi: [],
       ccil: [],
+      tBills: [],
       fimmda: [],
       errors: [error.message || "Unknown backend error"]
     });
@@ -94,6 +97,26 @@ function parseFimmdaPage(text) {
   }
 
   return dedupeByLabel(rows, (row) => row.tenor).slice(0, 6);
+}
+
+function parseRbiTBills(text) {
+  const normalized = normalizeWhitespace(text);
+  const asOnMatch = normalized.match(/\* cut-off at the last auction\s+# as on ([A-Za-z]+\s+\d{2},\s+\d{4})/i);
+  const asOn = asOnMatch ? asOnMatch[1] : "";
+  const pattern = /(91 day T-bills|182 day T-bills|364 day T-bills)\s*:\s*([\d.]+)%\*/gi;
+  const rows = [];
+  let match;
+
+  while ((match = pattern.exec(normalized)) !== null) {
+    rows.push({
+      instrument: toTitleCase(match[1]),
+      tenor: match[1].split(" ")[0],
+      yield: match[2],
+      asOn
+    });
+  }
+
+  return dedupeByLabel(rows, (row) => row.instrument).slice(0, 3);
 }
 
 function dedupeByLabel(items, getKey) {
