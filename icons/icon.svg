@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">MarketPulse IN icon</title>
+  <desc id="desc">Stylized market pulse icon with chart bars and a wave.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0d1b2a" />
+      <stop offset="100%" stop-color="#1f5189" />
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6ce5d5" />
+      <stop offset="100%" stop-color="#8fd8ff" />
+    </linearGradient>
+  </defs>
+  <rect x="24" y="24" width="464" height="464" rx="112" fill="url(#bg)" />
+  <path d="M116 334h40v-98h52v98h40V182h52v152h40V246h56v88" fill="none" stroke="#eff6ff" stroke-width="30" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M92 278c36-28 62-42 88-42 42 0 62 34 94 34 20 0 42-10 68-31 24-20 46-31 78-37" fill="none" stroke="url(#accent)" stroke-width="22" stroke-linecap="round" stroke-linejoin="round" />
+  <circle cx="170" cy="238" r="11" fill="#6ce5d5" />
+  <circle cx="302" cy="270" r="11" fill="#8fd8ff" />
+  <circle cx="392" cy="214" r="11" fill="#6ce5d5" />
+</svg>
