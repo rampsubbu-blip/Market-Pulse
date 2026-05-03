@@ -2,10 +2,10 @@ const STORAGE_KEY = "marketpulse-in.snapshot.v1";
 const INSTALL_MESSAGE = "On iPhone, Safari does not show an install prompt. Use Share -> Add to Home Screen.";
 const FEED_LIMIT = 6;
 const API_ENDPOINTS = [
-  "./data/latest.json",
-  "/data/latest.json",
   "./api/market-data",
-  "/api/market-data"
+  "/api/market-data",
+  "./data/latest.json",
+  "/data/latest.json"
 ];
 
 const SOURCES = {
@@ -241,17 +241,18 @@ function parseCcilPage(text) {
 
 function parseFimmdaPage(text) {
   const normalized = normalizeWhitespace(text);
-  const pattern = /(Overnight|3 Day|14 Day|1 Month|3 Month|6 Month|1 Year)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/gi;
+  const pattern = /(OVERNIGHT|3 DAY|14 DAY|1 MONTH|3 MONTH|6 MONTH|1 YEAR)\s+(\d{1,2}:\d{2}\s*[ap]\.m\.)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/gi;
   const rows = [];
   let match;
 
   while ((match = pattern.exec(normalized)) !== null) {
     rows.push({
-      tenor: match[1],
-      mibid: match[2],
-      mibor: match[3],
-      previous: match[4],
-      change: match[5]
+      tenor: toTitleCase(match[1]),
+      time: match[2],
+      mibid: match[3],
+      mibidStd: match[4],
+      mibor: match[5],
+      miborStd: match[6]
     });
   }
 
@@ -336,7 +337,7 @@ function buildOutlookCards(snapshot) {
   if (overnight) {
     cards.push({
       title: "Benchmark checkpoint",
-      body: `FIMMDA Overnight MIBOR is ${overnight.mibor}, with previous close at ${overnight.previous}. Use this as a quick sense-check against your CCIL front-end read.`
+      body: `FIMMDA Overnight MIBOR is ${overnight.mibor}, with MIBID at ${overnight.mibid}. Use this as a quick sense-check against your CCIL front-end read.`
     });
   }
 
@@ -382,7 +383,7 @@ function renderFimmda(rows) {
     <div class="metric-card">
       <span class="metric-card__label">${escapeHtml(row.tenor)}</span>
       <span class="metric-card__value">${escapeHtml(row.mibor)}%</span>
-      <span class="metric-card__meta">MIBID ${escapeHtml(row.mibid)} • Previous ${escapeHtml(row.previous)} • Change ${escapeHtml(row.change)}</span>
+      <span class="metric-card__meta">Time ${escapeHtml(row.time)} • MIBID ${escapeHtml(row.mibid)} • MIBOR Std Dev ${escapeHtml(row.miborStd)}</span>
     </div>
   `).join("");
 }
@@ -462,6 +463,12 @@ function escapeHtml(value) {
 
 function escapeAttribute(value) {
   return escapeHtml(value);
+}
+
+function toTitleCase(value) {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function registerServiceWorker() {

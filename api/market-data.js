@@ -46,7 +46,7 @@ async function fetchText(url) {
 function parseRbiFeed(text) {
   return [...text.matchAll(/<item>[\s\S]*?<title>([\s\S]*?)<\/title>[\s\S]*?<link>([\s\S]*?)<\/link>[\s\S]*?<pubDate>([\s\S]*?)<\/pubDate>/gi)]
     .map((match) => ({
-      title: decodeXml(match[1]).trim(),
+      title: stripCdata(decodeXml(match[1]).trim()),
       link: decodeXml(match[2]).trim(),
       pubDate: decodeXml(match[3]).trim()
     }))
@@ -78,17 +78,18 @@ function parseCcilPage(text) {
 
 function parseFimmdaPage(text) {
   const normalized = normalizeWhitespace(text);
-  const pattern = /(Overnight|3 Day|14 Day|1 Month|3 Month|6 Month|1 Year)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/gi;
+  const pattern = /(OVERNIGHT|3 DAY|14 DAY|1 MONTH|3 MONTH|6 MONTH|1 YEAR)\s+(\d{1,2}:\d{2}\s*[ap]\.m\.)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/gi;
   const rows = [];
   let match;
 
   while ((match = pattern.exec(normalized)) !== null) {
     rows.push({
-      tenor: match[1],
-      mibid: match[2],
-      mibor: match[3],
-      previous: match[4],
-      change: match[5]
+      tenor: toTitleCase(match[1]),
+      time: match[2],
+      mibid: match[3],
+      mibidStd: match[4],
+      mibor: match[5],
+      miborStd: match[6]
     });
   }
 
@@ -122,4 +123,14 @@ function decodeXml(text) {
     .replaceAll("&gt;", ">")
     .replaceAll("&quot;", "\"")
     .replaceAll("&#39;", "'");
+}
+
+function stripCdata(text) {
+  return String(text ?? "").replace(/^<!\[CDATA\[/, "").replace(/\]\]>$/, "").trim();
+}
+
+function toTitleCase(value) {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
