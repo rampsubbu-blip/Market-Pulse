@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>MarketPulse IN</title>
-  <meta name="description" content="Installable India money market dashboard for RBI, CCIL, FIMMDA, CP and NCD tracking.">
+  <meta name="description" content="Installable India short-term market dashboard for T-bill rates and daily CP, CD and NCD primary issuances.">
   <meta name="theme-color" content="#0d1b2a">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -17,11 +17,11 @@
 <body>
   <div class="app-shell">
     <header class="hero">
-      <div class="hero__eyebrow">India Money Market Monitor</div>
+      <div class="hero__eyebrow">India Short-End Monitor</div>
       <div class="hero__topline">
         <div>
           <h1>MarketPulse IN</h1>
-          <p class="hero__summary">One installable PWA for RBI liquidity cues, CCIL money market rates, FIMMDA benchmarks, and the day’s key market links.</p>
+          <p class="hero__summary">Track only what matters here: RBI T-bill cut-offs and the day’s CP, CD, and NCD primary issuances.</p>
         </div>
         <button id="refreshButton" class="button button--primary" type="button">Refresh Data</button>
       </div>
@@ -34,91 +34,56 @@
     <main class="layout">
       <section class="panel panel--highlight">
         <div class="panel__header">
-          <h2>Daily Read</h2>
-          <p>Auto-generated from the latest successfully fetched snapshot.</p>
+          <h2>T-Bill Rates</h2>
+          <a href="https://www.rbi.org.in/home.aspx" target="_blank" rel="noreferrer">RBI source</a>
         </div>
-        <div id="outlook" class="outlook">
-          <div class="empty-state">Refresh the dashboard to build today’s market read.</div>
-        </div>
+        <div id="tBillRates" class="metric-list"></div>
       </section>
 
       <section class="grid grid--metrics">
         <article class="panel">
           <div class="panel__header">
-            <h2>Front-End Rates</h2>
-            <a href="https://www.ccilindia.com/money-market-rates-and-volumes-most-liquid-tenor-" target="_blank" rel="noreferrer">Open source</a>
+            <h2>CP Primary</h2>
+            <a href="https://www.ftrac.co.in/CP_PRI_MEM_MARK_WATC_VIEW.aspx" target="_blank" rel="noreferrer">Open source</a>
           </div>
-          <div id="ccilMetrics" class="metric-list"></div>
+          <div id="cpPrimary" class="feed-list"></div>
         </article>
 
         <article class="panel">
           <div class="panel__header">
-            <h2>FIMMDA Benchmarks</h2>
-            <a href="https://www.fimmda.org/NSE.aspx" target="_blank" rel="noreferrer">Open source</a>
+            <h2>CD Primary</h2>
+            <a href="https://www.ftrac.co.in/CD_PRI_MEM_MARK_WATC_VIEW.aspx" target="_blank" rel="noreferrer">Open source</a>
           </div>
-          <div id="fimmdaMetrics" class="metric-list"></div>
+          <div id="cdPrimary" class="feed-list"></div>
         </article>
       </section>
 
       <section class="grid grid--content">
         <article class="panel">
           <div class="panel__header">
-            <h2>RBI Headlines</h2>
-            <a href="https://rbi.org.in/pressreleases_rss.xml" target="_blank" rel="noreferrer">Open feed</a>
+            <h2>NCD Primary</h2>
+            <a href="https://www.ftrac.co.in/NC_PRI_MEM_MARK_WATC_VIEW.aspx" target="_blank" rel="noreferrer">Open source</a>
           </div>
-          <div id="rbiFeed" class="feed-list"></div>
+          <div id="ncdPrimary" class="feed-list"></div>
         </article>
 
         <article class="panel">
           <div class="panel__header">
-            <h2>Quick Links</h2>
-            <p>Jump straight to the official pages you use every morning.</p>
+            <h2>Source Notes</h2>
+            <p>Minimal app, official pages only.</p>
           </div>
-          <div class="link-grid">
-            <a class="link-card" href="https://www.rbi.org.in/" target="_blank" rel="noreferrer">
-              <strong>RBI</strong>
-              <span>Policy, auctions, liquidity releases</span>
-            </a>
-            <a class="link-card" href="https://www.ccilindia.com/" target="_blank" rel="noreferrer">
-              <strong>CCIL</strong>
-              <span>Money market rates and traded volumes</span>
-            </a>
-            <a class="link-card" href="https://www.fimmda.org/" target="_blank" rel="noreferrer">
-              <strong>FIMMDA</strong>
-              <span>Benchmarks for CP, CD, T-Bill and G-Sec curves</span>
-            </a>
-            <a class="link-card" href="https://www.nseindia.com/market-data/bonds-traded-in-capital-market" target="_blank" rel="noreferrer">
-              <strong>NSE Debt</strong>
-              <span>Corporate bond and debt market pages</span>
-            </a>
-            <a class="link-card" href="https://www.bseindia.com/markets/debt/" target="_blank" rel="noreferrer">
-              <strong>BSE Debt</strong>
-              <span>Corporate debt market references</span>
-            </a>
-            <a class="link-card" href="https://www.ccilindia.com/primary-and-secondary-market" target="_blank" rel="noreferrer">
-              <strong>CP and NCD</strong>
-              <span>Primary and secondary money market references</span>
-            </a>
+          <div class="notes">
+            <p>RBI provides the latest 91-day, 182-day, and 364-day T-bill cut-off yields.</p>
+            <p>CCIL F-TRAC pages provide market-watch views for CP, CD, and NCD primary issuances.</p>
+            <p id="installMessage">Open the hosted URL in Safari on iPhone, then use Share -> Add to Home Screen.</p>
           </div>
         </article>
-      </section>
-
-      <section class="panel">
-        <div class="panel__header">
-          <h2>Install Notes</h2>
-          <p>This PWA is designed to behave properly on iPhone when hosted over `https://`.</p>
-        </div>
-        <div class="notes">
-          <p>On iPhone: open the hosted URL in Safari, tap <strong>Share</strong>, then tap <strong>Add to Home Screen</strong>.</p>
-          <p id="installMessage">For Chrome and Edge on desktop or Android, an install prompt may appear automatically.</p>
-          <p>When a source blocks live browser access, the app keeps your most recent successful snapshot available offline.</p>
-        </div>
       </section>
 
       <section id="errorPanel" class="panel panel--warning hidden">
         <div class="panel__header">
           <h2>Fetch Notes</h2>
-          <p>Some sources are protective about cross-origin requests. The dashboard retries using browser-safe proxy fallbacks before giving up.</p>
+          <p>Last refresh details from the backend.</p>
         </div>
         <ul id="errorList" class="error-list"></ul>
       </section>

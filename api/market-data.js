@@ -1,18 +1,18 @@
 export default async function handler(request, response) {
   try {
-    const [rbiFeedText, rbiHomeText, ccilText, fimmdaText] = await Promise.all([
-      fetchText("https://rbi.org.in/pressreleases_rss.xml"),
+    const [rbiHomeText, cpPrimaryText, cdPrimaryText, ncdPrimaryText] = await Promise.all([
       fetchText("https://www.rbi.org.in/home.aspx"),
-      fetchText("https://www.ccilindia.com/money-market-rates-and-volumes-most-liquid-tenor-"),
-      fetchText("https://www.fimmda.org/NSE.aspx")
+      fetchText("https://www.ftrac.co.in/CP_PRI_MEM_MARK_WATC_VIEW.aspx"),
+      fetchText("https://www.ftrac.co.in/CD_PRI_MEM_MARK_WATC_VIEW.aspx"),
+      fetchText("https://www.ftrac.co.in/NC_PRI_MEM_MARK_WATC_VIEW.aspx")
     ]);
 
     const payload = {
       fetchedAt: new Date().toISOString(),
-      rbi: parseRbiFeed(rbiFeedText),
-      ccil: parseCcilPage(ccilText),
       tBills: parseRbiTBills(rbiHomeText),
-      fimmda: parseFimmdaPage(fimmdaText),
+      cpPrimary: parsePrimaryRows(cpPrimaryText),
+      cdPrimary: parsePrimaryRows(cdPrimaryText),
+      ncdPrimary: parsePrimaryRows(ncdPrimaryText),
       errors: []
     };
 
@@ -23,10 +23,10 @@ export default async function handler(request, response) {
     response.setHeader("Access-Control-Allow-Origin", "*");
     response.status(500).json({
       fetchedAt: new Date().toISOString(),
-      rbi: [],
-      ccil: [],
       tBills: [],
-      fimmda: [],
+      cpPrimary: [],
+      cdPrimary: [],
+      ncdPrimary: [],
       errors: [error.message || "Unknown backend error"]
     });
   }
@@ -44,59 +44,6 @@ async function fetchText(url) {
   }
 
   return response.text();
-}
-
-function parseRbiFeed(text) {
-  return [...text.matchAll(/<item>[\s\S]*?<title>([\s\S]*?)<\/title>[\s\S]*?<link>([\s\S]*?)<\/link>[\s\S]*?<pubDate>([\s\S]*?)<\/pubDate>/gi)]
-    .map((match) => ({
-      title: stripCdata(decodeXml(match[1]).trim()),
-      link: decodeXml(match[2]).trim(),
-      pubDate: decodeXml(match[3]).trim()
-    }))
-    .filter((item) => item.title && item.link)
-    .slice(0, 6);
-}
-
-function parseCcilPage(text) {
-  const normalized = normalizeWhitespace(text);
-  const pattern = /(\d{2}-\d{2}-\d{4})\s+(Call|TREP|Basket Repo|Special Repo)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/gi;
-  const rows = [];
-  let match;
-
-  while ((match = pattern.exec(normalized)) !== null) {
-    rows.push({
-      date: match[1],
-      instrument: match[2],
-      open: match[3],
-      high: match[4],
-      low: match[5],
-      wavg: match[6],
-      volume: match[7],
-      trades: match[8]
-    });
-  }
-
-  return dedupeByLabel(rows, (row) => row.instrument).slice(0, 6);
-}
-
-function parseFimmdaPage(text) {
-  const normalized = normalizeWhitespace(text);
-  const pattern = /(OVERNIGHT|3 DAY|14 DAY|1 MONTH|3 MONTH|6 MONTH|1 YEAR)\s+(\d{1,2}:\d{2}\s*[ap]\.m\.)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/gi;
-  const rows = [];
-  let match;
-
-  while ((match = pattern.exec(normalized)) !== null) {
-    rows.push({
-      tenor: toTitleCase(match[1]),
-      time: match[2],
-      mibid: match[3],
-      mibidStd: match[4],
-      mibor: match[5],
-      miborStd: match[6]
-    });
-  }
-
-  return dedupeByLabel(rows, (row) => row.tenor).slice(0, 6);
 }
 
 function parseRbiTBills(text) {
@@ -119,6 +66,34 @@ function parseRbiTBills(text) {
   return dedupeByLabel(rows, (row) => row.instrument).slice(0, 3);
 }
 
+function parsePrimaryRows(text) {
+  const normalized = normalizeWhitespace(text);
+  const pattern = /(INE[0-9A-Z]+)\s+(.+?)\s+(\d{2}-[A-Za-z]{3}-\d{4})\s+(\d+)\s+(.+?)\s+(T\+\d)\s+(\d+)\s+([\d,]+\.\d+)\s+([\d.]+)\s*-\s*([\d.]+)\s+([\d.]+)\s*-\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)/gi;
+  const rows = [];
+  let match;
+
+  while ((match = pattern.exec(normalized)) !== null) {
+    rows.push({
+      isin: match[1],
+      description: match[2].trim(),
+      maturityDate: match[3],
+      residualDays: match[4],
+      issuer: match[5].trim(),
+      settlementType: match[6],
+      trades: match[7],
+      issueAmount: match[8],
+      yieldFrom: match[9],
+      yieldTo: match[10],
+      priceFrom: match[11],
+      priceTo: match[12],
+      wap: match[13],
+      way: match[14]
+    });
+  }
+
+  return rows.slice(0, 12);
+}
+
 function dedupeByLabel(items, getKey) {
   const seen = new Set();
   return items.filter((item) => {
@@ -137,19 +112,6 @@ function normalizeWhitespace(text) {
     .replace(/&nbsp;/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function decodeXml(text) {
-  return String(text ?? "")
-    .replaceAll("&amp;", "&")
-    .replaceAll("&lt;", "<")
-    .replaceAll("&gt;", ">")
-    .replaceAll("&quot;", "\"")
-    .replaceAll("&#39;", "'");
-}
-
-function stripCdata(text) {
-  return String(text ?? "").replace(/^<!\[CDATA\[/, "").replace(/\]\]>$/, "").trim();
 }
 
 function toTitleCase(value) {

@@ -1,65 +1,29 @@
 {
-  "fetchedAt": "2026-05-03T18:30:00.000Z",
-  "rbi": [
-    {
-      "title": "Replace this file with your live RBI headlines feed",
-      "link": "https://www.rbi.org.in/",
-      "pubDate": "2026-05-03T18:30:00.000Z",
-      "description": "This placeholder snapshot proves the app data path works on static hosting. Swap it with real generated JSON for production."
-    }
-  ],
-  "ccil": [
-    {
-      "date": "03-05-2026",
-      "instrument": "Call",
-      "open": "0.00",
-      "high": "0.00",
-      "low": "0.00",
-      "wavg": "0.00",
-      "volume": "0.00",
-      "trades": "0"
-    },
-    {
-      "date": "03-05-2026",
-      "instrument": "TREP",
-      "open": "0.00",
-      "high": "0.00",
-      "low": "0.00",
-      "wavg": "0.00",
-      "volume": "0.00",
-      "trades": "0"
-    }
-  ],
+  "fetchedAt": "2026-05-11T09:00:00.000Z",
   "tBills": [
     {
       "instrument": "91 Day T-Bills",
       "tenor": "91",
       "yield": "0.00",
-      "asOn": "May 03, 2026"
+      "asOn": "May 11, 2026"
     },
     {
       "instrument": "182 Day T-Bills",
       "tenor": "182",
       "yield": "0.00",
-      "asOn": "May 03, 2026"
+      "asOn": "May 11, 2026"
     },
     {
       "instrument": "364 Day T-Bills",
       "tenor": "364",
       "yield": "0.00",
-      "asOn": "May 03, 2026"
+      "asOn": "May 11, 2026"
     }
   ],
-  "fimmda": [
-    {
-      "tenor": "Overnight",
-      "mibid": "0.00",
-      "mibor": "0.00",
-      "previous": "0.00",
-      "change": "0.00"
-    }
-  ],
+  "cpPrimary": [],
+  "cdPrimary": [],
+  "ncdPrimary": [],
   "errors": [
-    "Static-host fallback loaded. To get real data every day, publish a live JSON feed or deploy the included backend."
+    "Static fallback loaded. Deploy the backend for live T-bill and primary issuance data."
   ]
 }

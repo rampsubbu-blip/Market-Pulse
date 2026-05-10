@@ -1,6 +1,5 @@
-const STORAGE_KEY = "marketpulse-in.snapshot.v1";
-const INSTALL_MESSAGE = "On iPhone, Safari does not show an install prompt. Use Share -> Add to Home Screen.";
-const FEED_LIMIT = 6;
+const STORAGE_KEY = "marketpulse-in.snapshot.v2";
+const INSTALL_MESSAGE = "Open the hosted URL in Safari on iPhone, then use Share -> Add to Home Screen.";
 const API_ENDPOINTS = [
   "./api/market-data",
   "/api/market-data",
@@ -8,32 +7,24 @@ const API_ENDPOINTS = [
   "/data/latest.json"
 ];
 
-const SOURCES = {
-  rbiFeed: "https://rbi.org.in/pressreleases_rss.xml",
-  ccilMoneyMarket: "https://www.ccilindia.com/money-market-rates-and-volumes-most-liquid-tenor-",
-  fimmda: "https://www.fimmda.org/NSE.aspx"
-};
-
 const elements = {
   refreshButton: document.getElementById("refreshButton"),
   statusPill: document.getElementById("statusPill"),
   lastUpdatedLabel: document.getElementById("lastUpdatedLabel"),
-  outlook: document.getElementById("outlook"),
-  ccilMetrics: document.getElementById("ccilMetrics"),
-  fimmdaMetrics: document.getElementById("fimmdaMetrics"),
-  rbiFeed: document.getElementById("rbiFeed"),
+  tBillRates: document.getElementById("tBillRates"),
+  cpPrimary: document.getElementById("cpPrimary"),
+  cdPrimary: document.getElementById("cdPrimary"),
+  ncdPrimary: document.getElementById("ncdPrimary"),
   installMessage: document.getElementById("installMessage"),
   errorPanel: document.getElementById("errorPanel"),
   errorList: document.getElementById("errorList")
 };
 
-let deferredInstallPrompt = null;
-
 document.addEventListener("DOMContentLoaded", async () => {
   elements.installMessage.textContent = INSTALL_MESSAGE;
   hydrateFromCache();
   registerServiceWorker();
-  wireInstallPrompt();
+  elements.refreshButton.addEventListener("click", () => refreshDashboard());
   await refreshDashboard({ initialLoad: true });
 });
 
@@ -85,78 +76,19 @@ async function refreshDashboard({ initialLoad = false } = {}) {
     return;
   }
 
-  const results = await Promise.allSettled([
-    fetchSource("RBI feed", SOURCES.rbiFeed, parseRbiFeed),
-    fetchSource("CCIL money market", SOURCES.ccilMoneyMarket, parseCcilPage),
-    fetchSource("FIMMDA benchmarks", SOURCES.fimmda, parseFimmdaPage)
-  ]);
-
-  const snapshot = {
-    fetchedAt: new Date().toISOString(),
-    rbi: extractFulfilled(results[0], []),
-    ccil: extractFulfilled(results[1], []),
-    tBills: [],
-    fimmda: extractFulfilled(results[2], []),
-    errors: results
-      .filter((result) => result.status === "rejected")
-      .map((result) => result.reason?.message || "Unknown fetch error")
-  };
-
-  const successfulSources = [snapshot.rbi.length, snapshot.ccil.length, snapshot.fimmda.length].filter(Boolean).length;
-
-  if (successfulSources === 0) {
-    const cached = readCache();
-    if (cached) {
-      renderSnapshot(cached, {
-        statusText: "Live fetch failed, showing cached snapshot",
-        state: "error",
-        errors: snapshot.errors
-      });
-      setLoading(false);
-      return;
-    }
+  const cached = readCache();
+  if (cached) {
+    renderSnapshot(cached, {
+      statusText: "Live fetch failed, showing cached snapshot",
+      state: "error",
+      errors: ["Backend snapshot unavailable."]
+    });
+  } else {
+    renderEmpty();
+    renderErrors(["Backend snapshot unavailable."]);
   }
 
-  saveCache(snapshot);
-  renderSnapshot(snapshot, {
-    statusText: successfulSources === 3 ? "Live snapshot ready" : "Partial live snapshot ready",
-    state: successfulSources === 3 ? "ok" : "warn",
-    errors: snapshot.errors
-  });
   setLoading(false);
-}
-
-function extractFulfilled(result, fallback) {
-  return result.status === "fulfilled" ? result.value : fallback;
-}
-
-async function fetchSource(label, url, parser) {
-  const attempts = buildAttempts(url);
-  let lastError = null;
-
-  for (const attempt of attempts) {
-    try {
-      const response = await fetch(attempt.url, {
-        headers: attempt.headers,
-        cache: "no-store"
-      });
-
-      if (!response.ok) {
-        throw new Error(`${label} returned ${response.status}`);
-      }
-
-      const text = await response.text();
-      const parsed = parser(text);
-      if (!parsed || !parsed.length) {
-        throw new Error(`${label} returned no usable rows`);
-      }
-      return parsed;
-    } catch (error) {
-      lastError = new Error(`${label} failed via ${attempt.name}: ${error.message}`);
-    }
-  }
-
-  throw lastError || new Error(`${label} failed`);
 }
 
 async function fetchApiSnapshot() {
@@ -172,7 +104,7 @@ async function fetchApiSnapshot() {
         continue;
       }
 
-      if (Array.isArray(json.rbi) || Array.isArray(json.ccil) || Array.isArray(json.fimmda) || Array.isArray(json.tBills)) {
+      if (Array.isArray(json.tBills) || Array.isArray(json.cpPrimary) || Array.isArray(json.cdPrimary) || Array.isArray(json.ncdPrimary)) {
         return json;
       }
     } catch (error) {
@@ -186,107 +118,28 @@ async function fetchApiSnapshot() {
 function normalizeSnapshot(snapshot, extraErrors) {
   return {
     fetchedAt: snapshot.fetchedAt || new Date().toISOString(),
-    rbi: Array.isArray(snapshot.rbi) ? snapshot.rbi : [],
-    ccil: Array.isArray(snapshot.ccil) ? snapshot.ccil : [],
     tBills: Array.isArray(snapshot.tBills) ? snapshot.tBills : [],
-    fimmda: Array.isArray(snapshot.fimmda) ? snapshot.fimmda : [],
+    cpPrimary: Array.isArray(snapshot.cpPrimary) ? snapshot.cpPrimary : [],
+    cdPrimary: Array.isArray(snapshot.cdPrimary) ? snapshot.cdPrimary : [],
+    ncdPrimary: Array.isArray(snapshot.ncdPrimary) ? snapshot.ncdPrimary : [],
     errors: [...(Array.isArray(snapshot.errors) ? snapshot.errors : []), ...extraErrors]
   };
 }
 
-function buildAttempts(url) {
-  const cleanUrl = url.replace(/^https?:\/\//, "");
-  return [
-    { name: "direct", url },
-    { name: "allorigins", url: `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}` },
-    { name: "cors.isomorphic-git", url: `https://cors.isomorphic-git.org/${url}` },
-    { name: "jina-mirror", url: `https://r.jina.ai/http://${cleanUrl}` }
-  ];
-}
-
-function parseRbiFeed(text) {
-  const doc = new DOMParser().parseFromString(text, "text/xml");
-  const items = Array.from(doc.querySelectorAll("item"))
-    .map((item) => ({
-      title: item.querySelector("title")?.textContent?.trim(),
-      link: item.querySelector("link")?.textContent?.trim(),
-      pubDate: item.querySelector("pubDate")?.textContent?.trim(),
-      description: stripHtml(item.querySelector("description")?.textContent || "")
-    }))
-    .filter((item) => item.title && item.link);
-
-  const priority = items.filter((item) => /liquidity|auction|treasury bill|t-bill|repo|standing deposit|msf|ways and means/i.test(item.title));
-  return (priority.length ? priority : items).slice(0, FEED_LIMIT);
-}
-
-function parseCcilPage(text) {
-  const normalized = normalizeWhitespace(text);
-  const pattern = /(\d{2}-\d{2}-\d{4})\s+(Call|TREP|Basket Repo|Special Repo)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/gi;
-  const rows = [];
-  let match;
-
-  while ((match = pattern.exec(normalized)) !== null) {
-    rows.push({
-      date: match[1],
-      instrument: match[2],
-      open: match[3],
-      high: match[4],
-      low: match[5],
-      wavg: match[6],
-      volume: match[7],
-      trades: match[8]
-    });
-  }
-
-  return dedupeByLabel(rows, (row) => row.instrument).slice(0, 6);
-}
-
-function parseFimmdaPage(text) {
-  const normalized = normalizeWhitespace(text);
-  const pattern = /(OVERNIGHT|3 DAY|14 DAY|1 MONTH|3 MONTH|6 MONTH|1 YEAR)\s+(\d{1,2}:\d{2}\s*[ap]\.m\.)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/gi;
-  const rows = [];
-  let match;
-
-  while ((match = pattern.exec(normalized)) !== null) {
-    rows.push({
-      tenor: toTitleCase(match[1]),
-      time: match[2],
-      mibid: match[3],
-      mibidStd: match[4],
-      mibor: match[5],
-      miborStd: match[6]
-    });
-  }
-
-  return dedupeByLabel(rows, (row) => row.tenor).slice(0, 6);
-}
-
-function dedupeByLabel(items, getKey) {
-  const seen = new Set();
-  return items.filter((item) => {
-    const key = getKey(item);
-    if (!key || seen.has(key)) {
-      return false;
-    }
-    seen.add(key);
-    return true;
-  });
-}
-
 function renderSnapshot(snapshot, { statusText, state, errors }) {
   renderStatus(statusText, state, snapshot.fetchedAt);
-  renderOutlook(snapshot);
-  renderCcil(snapshot.ccil, snapshot.tBills || []);
-  renderFimmda(snapshot.fimmda);
-  renderRbi(snapshot.rbi);
+  renderTBills(snapshot.tBills);
+  renderPrimaryList(elements.cpPrimary, snapshot.cpPrimary, "No CP primary issuances captured in the latest snapshot.");
+  renderPrimaryList(elements.cdPrimary, snapshot.cdPrimary, "No CD primary issuances captured in the latest snapshot.");
+  renderPrimaryList(elements.ncdPrimary, snapshot.ncdPrimary, "No NCD primary issuances captured in the latest snapshot.");
   renderErrors(errors || []);
 }
 
 function renderEmpty() {
-  elements.outlook.innerHTML = `<div class="empty-state">No cached data yet. Tap Refresh Data after hosting the app over https, or publish a JSON snapshot in <code>data/latest.json</code>.</div>`;
-  elements.ccilMetrics.innerHTML = `<div class="empty-state">CCIL and T-bill metrics will appear here.</div>`;
-  elements.fimmdaMetrics.innerHTML = `<div class="empty-state">FIMMDA benchmarks will appear here.</div>`;
-  elements.rbiFeed.innerHTML = `<div class="empty-state">RBI headlines will appear here.</div>`;
+  elements.tBillRates.innerHTML = `<div class="empty-state">T-bill rates will appear here.</div>`;
+  elements.cpPrimary.innerHTML = `<div class="empty-state">CP primary issuances will appear here.</div>`;
+  elements.cdPrimary.innerHTML = `<div class="empty-state">CD primary issuances will appear here.</div>`;
+  elements.ncdPrimary.innerHTML = `<div class="empty-state">NCD primary issuances will appear here.</div>`;
 }
 
 function renderStatus(text, state, fetchedAt) {
@@ -297,134 +150,31 @@ function renderStatus(text, state, fetchedAt) {
     : "No snapshot timestamp available";
 }
 
-function renderOutlook(snapshot) {
-  const cards = buildOutlookCards(snapshot)
-    .map((item) => `
-      <div class="outlook-card">
-        <strong>${escapeHtml(item.title)}</strong>
-        <span>${escapeHtml(item.body)}</span>
-      </div>
-    `)
-    .join("");
-
-  elements.outlook.innerHTML = cards || `<div class="empty-state">No insights yet. Refresh after the sources are reachable.</div>`;
-}
-
-function buildOutlookCards(snapshot) {
-  const cards = [];
-  const call = findCcil(snapshot.ccil, "Call");
-  const trep = findCcil(snapshot.ccil, "TREP");
-  const tbill91 = findTBill(snapshot.tBills || [], "91 Day T-Bills");
-  const overnight = findFimmda(snapshot.fimmda, "Overnight");
-  const topHeadline = snapshot.rbi[0];
-
-  if (call && trep) {
-    const callRate = Number(call.wavg);
-    const trepRate = Number(trep.wavg);
-
-    if (Number.isFinite(callRate) && Number.isFinite(trepRate)) {
-      if (callRate - trepRate > 0.2) {
-        cards.push({
-          title: "Funding tone looks tighter",
-          body: `Call money is trading above TREP by ${(callRate - trepRate).toFixed(2)} percentage points, which usually points to tighter unsecured liquidity versus collateralized funding.`
-        });
-      } else {
-        cards.push({
-          title: "Front-end liquidity looks balanced",
-          body: `Call and TREP weighted averages are moving in a tight band, suggesting overnight funding conditions are relatively orderly.`
-        });
-      }
-    }
-  }
-
-  if (overnight) {
-    cards.push({
-      title: "Benchmark checkpoint",
-      body: `FIMMDA Overnight MIBOR is ${overnight.mibor}, with MIBID at ${overnight.mibid}. Use this as a quick sense-check against your CCIL front-end read.`
-    });
-  }
-
-  if (tbill91) {
-    cards.push({
-      title: "T-bill checkpoint",
-      body: `The latest RBI 91-day T-bill cut-off is ${tbill91.yield}%. Compare that against overnight funding to gauge how the short sovereign curve is sitting versus money-market levels.`
-    });
-  }
-
-  if (topHeadline) {
-    cards.push({
-      title: "RBI watch item",
-      body: `${topHeadline.title}. Keep that release on the radar before taking your first liquidity or short-end view for the day.`
-    });
-  }
-
-  if (!cards.length) {
-    cards.push({
-      title: "Snapshot pending",
-      body: "This app is ready, but it still needs one successful fetch after deployment to populate the daily read."
-    });
-  }
-
-  return cards.slice(0, 3);
-}
-
-function renderCcil(rows, tBills = []) {
-  const combined = [
-    ...rows.map((row) => ({ kind: "ccil", ...row })),
-    ...tBills.map((row) => ({ kind: "tbill", ...row }))
-  ];
-
-  if (!combined.length) {
-    elements.ccilMetrics.innerHTML = `<div class="empty-state">No CCIL rows parsed from the latest fetch.</div>`;
-    return;
-  }
-
-  elements.ccilMetrics.innerHTML = combined.map((row) => {
-    if (row.kind === "tbill") {
-      return `
-        <div class="metric-card">
-          <span class="metric-card__label">${escapeHtml(row.instrument)}</span>
-          <span class="metric-card__value">${escapeHtml(row.yield)}%</span>
-          <span class="metric-card__meta">RBI cut-off yield | Auction tenor ${escapeHtml(row.tenor)} days | Source date ${escapeHtml(row.asOn || "Latest available")}</span>
-        </div>
-      `;
-    }
-
-    return `
-      <div class="metric-card">
-        <span class="metric-card__label">${escapeHtml(row.instrument)}</span>
-        <span class="metric-card__value">${escapeHtml(row.wavg)}%</span>
-        <span class="metric-card__meta">Date ${escapeHtml(row.date)} | Volume ${escapeHtml(row.volume)} | Trades ${escapeHtml(row.trades)}</span>
-      </div>
-    `;
-  }).join("");
-}
-
-function renderFimmda(rows) {
+function renderTBills(rows) {
   if (!rows.length) {
-    elements.fimmdaMetrics.innerHTML = `<div class="empty-state">No FIMMDA rows parsed from the latest fetch.</div>`;
+    elements.tBillRates.innerHTML = `<div class="empty-state">No T-bill rates parsed from the latest snapshot.</div>`;
     return;
   }
 
-  elements.fimmdaMetrics.innerHTML = rows.map((row) => `
+  elements.tBillRates.innerHTML = rows.map((row) => `
     <div class="metric-card">
-      <span class="metric-card__label">${escapeHtml(row.tenor)}</span>
-      <span class="metric-card__value">${escapeHtml(row.mibor)}%</span>
-      <span class="metric-card__meta">Time ${escapeHtml(row.time)} | MIBID ${escapeHtml(row.mibid)} | MIBOR Std Dev ${escapeHtml(row.miborStd)}</span>
+      <span class="metric-card__label">${escapeHtml(row.instrument)}</span>
+      <span class="metric-card__value">${escapeHtml(row.yield)}%</span>
+      <span class="metric-card__meta">RBI cut-off yield | Auction tenor ${escapeHtml(row.tenor)} days | Source date ${escapeHtml(row.asOn || "Latest available")}</span>
     </div>
   `).join("");
 }
 
-function renderRbi(items) {
-  if (!items.length) {
-    elements.rbiFeed.innerHTML = `<div class="empty-state">No RBI headlines parsed from the latest fetch.</div>`;
+function renderPrimaryList(target, rows, emptyMessage) {
+  if (!rows.length) {
+    target.innerHTML = `<div class="empty-state">${escapeHtml(emptyMessage)}</div>`;
     return;
   }
 
-  elements.rbiFeed.innerHTML = items.map((item) => `
+  target.innerHTML = rows.map((row) => `
     <article class="feed-item">
-      <a class="feed-item__title" href="${escapeAttribute(item.link)}" target="_blank" rel="noreferrer">${escapeHtml(item.title)}</a>
-      <span class="feed-item__meta">${escapeHtml(formatDate(item.pubDate))}</span>
+      <div class="feed-item__title">${escapeHtml(row.issuer)}</div>
+      <span class="feed-item__meta">${escapeHtml(row.description)} | Maturity ${escapeHtml(row.maturityDate)} | Amount Rs ${escapeHtml(row.issueAmount)} cr | Yield ${escapeHtml(row.yieldFrom)}%${row.yieldTo && row.yieldTo !== row.yieldFrom ? ` to ${escapeHtml(row.yieldTo)}%` : ""}</span>
     </article>
   `).join("");
 }
@@ -448,41 +198,6 @@ function setLoading(isLoading, text = "Loading") {
   }
 }
 
-function findCcil(rows, instrument) {
-  return rows.find((row) => row.instrument.toLowerCase() === instrument.toLowerCase());
-}
-
-function findFimmda(rows, tenor) {
-  return rows.find((row) => row.tenor.toLowerCase() === tenor.toLowerCase());
-}
-
-function findTBill(rows, instrument) {
-  return rows.find((row) => row.instrument.toLowerCase() === instrument.toLowerCase());
-}
-
-function normalizeWhitespace(text) {
-  return text
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function stripHtml(text) {
-  return text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-}
-
-function formatDate(raw) {
-  if (!raw) {
-    return "Date unavailable";
-  }
-
-  const parsed = new Date(raw);
-  return Number.isNaN(parsed.getTime())
-    ? raw
-    : parsed.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
-}
-
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -492,16 +207,6 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
-function escapeAttribute(value) {
-  return escapeHtml(value);
-}
-
-function toTitleCase(value) {
-  return String(value ?? "")
-    .toLowerCase()
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) {
     return;
@@ -509,20 +214,5 @@ function registerServiceWorker() {
 
   navigator.serviceWorker.register("./sw.js").catch((error) => {
     console.warn("Service worker registration failed", error);
-  });
-}
-
-function wireInstallPrompt() {
-  window.addEventListener("beforeinstallprompt", (event) => {
-    event.preventDefault();
-    deferredInstallPrompt = event;
-    elements.installMessage.textContent = "This browser supports app install. Use the browser install UI when it appears.";
-  });
-
-  elements.refreshButton.addEventListener("click", () => refreshDashboard());
-
-  window.addEventListener("appinstalled", () => {
-    deferredInstallPrompt = null;
-    elements.installMessage.textContent = "App installed successfully.";
   });
 }
